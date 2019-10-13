@@ -1,0 +1,58 @@
+diff --git a/cmake/pcl_find_cuda.cmake b/cmake/pcl_find_cuda.cmake
+index ae9e612..b37b7ba 100644
+--- a/cmake/pcl_find_cuda.cmake
++++ b/cmake/pcl_find_cuda.cmake
+@@ -8,11 +8,12 @@ if(MSVC)
+ endif()
+ 
+ set(CUDA_FIND_QUIETLY TRUE)
+-find_package(CUDA 4)
++find_package(CUDA)
+ 
+ if(CUDA_FOUND)
+ 	message(STATUS "Found CUDA Toolkit v${CUDA_VERSION_STRING}")
+-	
++  set(HAVE_CUDA TRUE)
++
+ 	if(${CUDA_VERSION_STRING} VERSION_LESS "7.5")
+ 	  # Recent versions of cmake set CUDA_HOST_COMPILER to CMAKE_C_COMPILER which
+ 	  # on OSX defaults to clang (/usr/bin/cc), but this is not a supported cuda
+diff --git a/cuda/features/include/pcl/cuda/features/normal_3d_kernels.h b/cuda/features/include/pcl/cuda/features/normal_3d_kernels.h
+index b5b0858..10ce06c 100644
+--- a/cuda/features/include/pcl/cuda/features/normal_3d_kernels.h
++++ b/cuda/features/include/pcl/cuda/features/normal_3d_kernels.h
+@@ -164,10 +164,10 @@ namespace pcl
+         , sqr_radius_(sqr_radius)
+         , sqrt_desired_nr_neighbors_ (sqrt_desired_nr_neighbors)
+       {}
+-  
++
+       template <typename Tuple>
+       inline __host__ __device__
+-      float4 operator () (Tuple &t)
++      float4 operator () (const Tuple &t)
+       {
+         float3 query_pt = thrust::get<0>(t);
+         float4 normal = thrust::get<1>(t);
+@@ -190,7 +190,7 @@ namespace pcl
+            (centroid.z - query_pt.z) / sqrt(sqr_radius_) ,
+            0);
+       }
+-  
++
+       const PointXYZRGB *points_;
+       float focallength_;
+       OrganizedRadiusSearch<CloudConstPtr> search_;
+diff --git a/cuda/io/src/extract_indices.cu b/cuda/io/src/extract_indices.cu
+index a56cb14..cb66bd7 100644
+--- a/cuda/io/src/extract_indices.cu
++++ b/cuda/io/src/extract_indices.cu
+@@ -156,7 +156,7 @@ struct ColorCloudFromImage
+ 
+   template <typename Tuple>
+   inline __host__ __device__
+-  PointXYZRGB operator () (Tuple &t)
++  PointXYZRGB operator () (const Tuple &t)
+   {
+     PointXYZRGB &pt = thrust::get<0>(t);
+     char4 rgb = colors_[thrust::get<1>(t)];
