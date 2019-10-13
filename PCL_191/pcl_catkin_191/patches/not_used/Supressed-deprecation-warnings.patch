@@ -1,0 +1,285 @@
+diff --git a/gpu/kinfu/src/cuda/extract.cu b/gpu/kinfu/src/cuda/extract.cu
+index 5cc2e63..d678d16 100644
+--- a/gpu/kinfu/src/cuda/extract.cu
++++ b/gpu/kinfu/src/cuda/extract.cu
+@@ -90,7 +90,11 @@ namespace pcl
+         __shared__ int cta_buffer[CTA_SIZE];
+ #endif
+ 
+-#if __CUDA_ARCH__ >= 120
++#if CUDA_VERSION >= 9000
++        if (__all_sync (__activemask (), x >= VOLUME_X)
++            || __all_sync (__activemask (), y >= VOLUME_Y))
++          return;
++#elif __CUDA_ARCH__ >= 120
+         if (__all (x >= VOLUME_X) || __all (y >= VOLUME_Y))
+           return;
+ #else         
+@@ -187,8 +191,11 @@ namespace pcl
+             }              /* if (W != 0 && F != 1.f) */
+           }            /* if (x < VOLUME_X && y < VOLUME_Y) */
+ 
+-
+-#if __CUDA_ARCH__ >= 200
++#if CUDA_VERSION >= 9000
++          int total_warp = __popc (__ballot_sync (__activemask (), local_count > 0))
++                         + __popc (__ballot_sync (__activemask (), local_count > 1))
++                         + __popc (__ballot_sync (__activemask (), local_count > 2));
++#elif __CUDA_ARCH__ >= 200
+           ///not we fulfilled points array at current iteration
+           int total_warp = __popc (__ballot (local_count > 0)) + __popc (__ballot (local_count > 1)) + __popc (__ballot (local_count > 2));
+ #else
+diff --git a/gpu/kinfu/src/cuda/marching_cubes.cu b/gpu/kinfu/src/cuda/marching_cubes.cu
+index 89990d1..dbd5a52 100644
+--- a/gpu/kinfu/src/cuda/marching_cubes.cu
++++ b/gpu/kinfu/src/cuda/marching_cubes.cu
+@@ -143,7 +143,11 @@ namespace pcl
+ #endif
+ 
+ 
+-#if __CUDA_ARCH__ >= 120
++#if CUDA_VERSION >= 9000
++        if (__all_sync (__activemask (), x >= VOLUME_X)
++            || __all_sync (__activemask (), y >= VOLUME_Y))
++          return;
++#elif __CUDA_ARCH__ >= 200
+         if (__all (x >= VOLUME_X) || __all (y >= VOLUME_Y))
+           return;
+ #else        
+@@ -169,7 +173,9 @@ namespace pcl
+             // read number of vertices from texture
+             numVerts = (cubeindex == 0 || cubeindex == 255) ? 0 : tex1Dfetch (numVertsTex, cubeindex);
+           }
+-#if __CUDA_ARCH__ >= 200
++#if CUDA_VERSION >= 9000
++          int total = __popc (__ballot_sync (__activemask (), numVerts > 0));
++#elif __CUDA_ARCH__ >= 200
+           int total = __popc (__ballot (numVerts > 0));
+ #else
+           int total = __popc (Emulation::Ballot(numVerts > 0, cta_buffer));
+@@ -184,7 +190,9 @@ namespace pcl
+           }
+           int old_global_voxels_count = warps_buffer[warp_id];
+ 
+-#if __CUDA_ARCH__ >= 200
++#if CUDA_VERSION >= 9000
++          int offs = Warp::binaryExclScan (__ballot_sync (__activemask (), numVerts > 0));
++#elif __CUDA_ARCH__ >= 200
+           int offs = Warp::binaryExclScan (__ballot (numVerts > 0));
+ #else          
+           int offs = Warp::binaryExclScan(Emulation::Ballot(numVerts > 0, cta_buffer));
+diff --git a/gpu/kinfu/src/cuda/utils.hpp b/gpu/kinfu/src/cuda/utils.hpp
+index b333a3d..991d2d8 100644
+--- a/gpu/kinfu/src/cuda/utils.hpp
++++ b/gpu/kinfu/src/cuda/utils.hpp
+@@ -39,6 +39,7 @@
+ #ifndef PCL_GPU_KINFU_CUDA_UTILS_HPP_
+ #define PCL_GPU_KINFU_CUDA_UTILS_HPP_
+ 
++#include <cuda.h>
+ 
+ namespace pcl
+ {
+@@ -602,9 +603,12 @@ namespace pcl
+ 	  static __forceinline__ __device__ int 
+       Ballot(int predicate, volatile int* cta_buffer)
+ 	  {
+-#if __CUDA_ARCH__ >= 200
++#if CUDA_VERSION >= 9000
++      (void)cta_buffer;
++      return __ballot_sync (__activemask (), predicate);
++#elif __CUDA_ARCH__ >= 200
+ 	    (void)cta_buffer;
+-		return __ballot(predicate);
++		  return __ballot(predicate);
+ #else
+         int tid = Block::flattenedThreadId();				
+ 		cta_buffer[tid] = predicate ? (1 << (tid & 31)) : 0;
+@@ -615,7 +619,10 @@ namespace pcl
+       static __forceinline__ __device__ bool
+       All(int predicate, volatile int* cta_buffer)
+       {
+-#if __CUDA_ARCH__ >= 200
++#if CUDA_VERSION >= 9000
++      (void)cta_buffer;
++      return __all_sync (__activemask (), predicate);
++#elif __CUDA_ARCH__ >= 200
+ 	    (void)cta_buffer;
+ 		return __all(predicate);
+ #else
+diff --git a/gpu/kinfu_large_scale/src/cuda/extract.cu b/gpu/kinfu_large_scale/src/cuda/extract.cu
+index 72ed213..d5136d7 100644
+--- a/gpu/kinfu_large_scale/src/cuda/extract.cu
++++ b/gpu/kinfu_large_scale/src/cuda/extract.cu
+@@ -108,7 +108,11 @@ namespace pcl
+           __shared__ int cta_buffer[CTA_SIZE];
+   #endif
+ 
+-  #if __CUDA_ARCH__ >= 120
++  #if CUDA_VERSION >= 9000
++          if (__all_sync (__activemask (), x >= VOLUME_X)
++              || __all_sync (__activemask (), y >= VOLUME_Y))
++            return;
++  #elif __CUDA_ARCH__ >= 120
+           if (__all (x >= VOLUME_X) || __all (y >= VOLUME_Y))
+             return;
+   #else         
+@@ -206,7 +210,11 @@ namespace pcl
+             }/* if (x < VOLUME_X && y < VOLUME_Y) */
+ 
+ 
+-  #if __CUDA_ARCH__ >= 200
++  #if CUDA_VERSION >= 9000
++            int total_warp = __popc (__ballot_sync (__activemask (), local_count > 0))
++                           + __popc (__ballot_sync (__activemask (), local_count > 1))
++                           + __popc (__ballot_sync (__activemask (), local_count > 2));
++  #elif __CUDA_ARCH__ >= 200
+             //not we fulfilled points array at current iteration
+             int total_warp = __popc (__ballot (local_count > 0)) + __popc (__ballot (local_count > 1)) + __popc (__ballot (local_count > 2));
+   #else
+@@ -316,8 +324,15 @@ namespace pcl
+ 
+             // local_count counts the number of zero crossing for the current thread. Now we need to merge this knowledge with the other threads
+             // not we fulfilled points array at current iteration
+-            int total_warp = __popc (__ballot (local_count > 0)) + __popc (__ballot (local_count > 1)) + __popc (__ballot (local_count > 2));
+-            
++          #if CUDA_VERSION >= 9000
++            int total_warp = __popc (__ballot_sync (__activemask (), local_count > 0))
++                           + __popc (__ballot_sync (__activemask (), local_count > 1))
++                           + __popc (__ballot_sync (__activemask (), local_count > 2));
++          #else
++            int total_warp = __popc (__ballot (local_count > 0))
++                           + __popc (__ballot (local_count > 1))
++                           + __popc (__ballot (local_count > 2));
++          #endif
+ 
+             if (total_warp > 0)  ///more than 0 zero-crossings
+             {
+diff --git a/gpu/kinfu_large_scale/src/cuda/marching_cubes.cu b/gpu/kinfu_large_scale/src/cuda/marching_cubes.cu
+index 0ecec1d..2c84b4f 100644
+--- a/gpu/kinfu_large_scale/src/cuda/marching_cubes.cu
++++ b/gpu/kinfu_large_scale/src/cuda/marching_cubes.cu
+@@ -146,8 +146,14 @@ namespace pcl
+           int x = threadIdx.x + blockIdx.x * CTA_SIZE_X;
+           int y = threadIdx.y + blockIdx.y * CTA_SIZE_Y;
+ 
++        #if CUDA_VERSION >= 9000
++          if (__all_sync (__activemask (), x >= VOLUME_X)
++              || __all_sync (__activemask (), y >= VOLUME_Y))
++            return;
++        #else
+           if (__all (x >= VOLUME_X) || __all (y >= VOLUME_Y))
+             return;
++        #endif
+ 
+           int ftid = Block::flattenedThreadId ();
+                   int warp_id = Warp::id();
+@@ -167,7 +173,11 @@ namespace pcl
+               numVerts = (cubeindex == 0 || cubeindex == 255) ? 0 : tex1Dfetch (numVertsTex, cubeindex);
+             }
+ 
++          #if CUDA_VERSION >= 9000
++            int total = __popc (__ballot_sync (__activemask (), numVerts > 0));
++          #else
+             int total = __popc (__ballot (numVerts > 0));
++          #endif
+                     if (total == 0)
+                           continue;
+ 
+@@ -178,7 +188,11 @@ namespace pcl
+             }
+             int old_global_voxels_count = warps_buffer[warp_id];
+ 
++          #if CUDA_VERSION >= 9000
++            int offs = Warp::binaryExclScan (__ballot_sync (__activemask (), numVerts > 0));
++          #else
+             int offs = Warp::binaryExclScan (__ballot (numVerts > 0));
++          #endif
+ 
+             if (old_global_voxels_count + offs < max_size && numVerts > 0)
+             {
+diff --git a/gpu/kinfu_large_scale/src/cuda/utils.hpp b/gpu/kinfu_large_scale/src/cuda/utils.hpp
+index 6daf6f1..f1a430f 100644
+--- a/gpu/kinfu_large_scale/src/cuda/utils.hpp
++++ b/gpu/kinfu_large_scale/src/cuda/utils.hpp
+@@ -38,8 +38,8 @@
+ 
+ #ifndef PCL_GPU_KINFU_CUDA_UTILS_HPP_
+ #define PCL_GPU_KINFU_CUDA_UTILS_HPP_
+-//#include <boost/graph/buffer_concepts.hpp>
+ 
++#include <cuda.h>
+ 
+ namespace pcl
+ {
+@@ -605,9 +605,12 @@ namespace pcl
+             static __forceinline__ __device__ int 
+         Ballot(int predicate, volatile int* cta_buffer)
+             {
+-  #if __CUDA_ARCH__ >= 200
++  #if CUDA_VERSION >= 9000
+               (void)cta_buffer;
+-                  return __ballot(predicate);
++                  return __ballot_sync (__activemask (), predicate);
++  #elif __CUDA_ARCH__ >= 200
++              (void)cta_buffer;
++                  return __ballot (predicate);
+   #else
+           int tid = Block::flattenedThreadId();				
+                   cta_buffer[tid] = predicate ? (1 << (tid & 31)) : 0;
+@@ -618,9 +621,12 @@ namespace pcl
+         static __forceinline__ __device__ bool
+         All(int predicate, volatile int* cta_buffer)
+         {
+-  #if __CUDA_ARCH__ >= 200
++  #if CUDA_VERSION >= 9000
++              (void)cta_buffer;
++                  return __all_sync (__activemask (), predicate);
++  #elif __CUDA_ARCH__ >= 200
+               (void)cta_buffer;
+-                  return __all(predicate);
++                  return __all (predicate);
+   #else
+           int tid = Block::flattenedThreadId();				
+                   cta_buffer[tid] = predicate ? 1 : 0;
+diff --git a/gpu/surface/src/cuda/convex_hull.cu b/gpu/surface/src/cuda/convex_hull.cu
+index d21f3f3..f26e613 100644
+--- a/gpu/surface/src/cuda/convex_hull.cu
++++ b/gpu/surface/src/cuda/convex_hull.cu
+@@ -467,9 +467,14 @@ namespace pcl
+ 		{
+ 			int idx = threadIdx.x + blockIdx.x * blockDim.x;
+ 
+-			if (__all(idx >= facet_count))
++#if CUDA_VERSION >= 9000
++      if (__all_sync (__activemask (), idx >= facet_count))
++        return;
++#else
++			if (__all (idx >= facet_count))
+ 				return;
+-						
++#endif
++
+ 			int empty = 0;
+ 
+ 			if(idx < facet_count)
+@@ -492,10 +497,18 @@ namespace pcl
+ 				  empty = 1;                
+ 			}
+ 
+-			int total = __popc(__ballot(empty));
++#if CUDA_VERSION >= 9000
++      int total = __popc (__ballot_sync (__activemask (), empty));
++#else
++			int total = __popc (__ballot (empty));
++#endif
+ 			if (total > 0)
+ 			{
+-				int offset = Warp::binaryExclScan(__ballot(empty));
++#if CUDA_VERSION >= 9000
++        int offset = Warp::binaryExclScan (__ballot_sync (__activemask (), empty));
++#else
++				int offset = Warp::binaryExclScan (__ballot (empty));
++#endif
+ 
+ 				volatile __shared__ int wapr_buffer[WARPS];
