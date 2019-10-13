@@ -1,12 +1,12 @@
 ## pcl_catkin_172
 
-A catkin wrapper for PCL 1.7.2 (10 Sept 2014)
-This downloads and compiles the source code.
+A catkin wrapper for PCL 1.7.2 (10 Sept 2014)  
+This downloads and compiles the source code.  
 
 Note: GPU support is missing from this branch of PCL, you should try a newer version.  
 
-Author: David Butterworth, 2015-2017.
-Based on a package by ETHZ-ASL, except this version automatically downloads the source and does not depend on other packages like `catkin_simple`.
+Author: David Butterworth, 2015-2017.  
+Based on a package by ETHZ-ASL, except this version automatically downloads the source and does not depend on other packages like `catkin_simple`.  
 
 ### Installation
 
@@ -19,4 +19,4 @@ Use `catkin build` from `catkin_tools`.
 
 ### Usage
 
-Check the `test_pcl` package for an example.
+Check the `test_pcl` package for an example.  
